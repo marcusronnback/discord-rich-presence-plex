@@ -10,13 +10,14 @@ import sys
 import tempfile
 import threading
 import time
+from infi.systray import SysTrayIcon
 
 class plexConfig:
 
 	extraLogging = True
-	timeRemaining = False
-
-	def __init__(self, serverName = "", username = "", password = "", token = "", listenForUser = "", blacklistedLibraries = None, whitelistedLibraries = None, clientID = "413407336082833418"):
+	timeRemaining = True
+	
+	def __init__(self, serverName = "", username = "", password = "", token = "", listenForUser = "", blacklistedLibraries = ["Anime (Serie)", "Anime (Film)"], whitelistedLibraries = None, clientID = ""):
 		self.serverName = serverName
 		self.username = username
 		self.password = password
@@ -27,8 +28,9 @@ class plexConfig:
 		self.clientID = clientID
 
 plexConfigs = [
-	# plexConfig(serverName = "", username = "", password = "", token = "")
+	plexConfig(serverName = "", username = "", password = "", token = "")
 ]
+
 
 class discordRichPresence:
 
@@ -66,7 +68,7 @@ class discordRichPresence:
 			self.running = True
 		except Exception as e:
 			self.child.log("[HANDSHAKE] " + str(e))
-
+			
 	def start(self):
 		self.child.log("Opening Discord IPC Pipe")
 		emptyProcessFilePath = tempfile.gettempdir() + ("/" if isLinux else "\\") + "discordRichPresencePlex-emptyProcess.py"
@@ -116,15 +118,17 @@ class discordRichPresence:
 		}
 		self.write(1, payload)
 		self.loop.run_until_complete(self.read())
+		
+def tray_title(systray):
+	print("discord presence")
 
-class discordRichPresencePlex(discordRichPresence):
-
+class discordRichPresencePlex(discordRichPresence): 
 	productName = "Plex Media Server"
 	stopTimerInterval = 5
 	stopTimer2Interval = 35
 	checkConnectionTimerInterval = 60
 	maximumIgnores = 3
-
+		
 	def __init__(self, plexConfig):
 		self.plexConfig = plexConfig
 		self.instanceID = hashlib.md5(str(id(self)).encode("UTF-8")).hexdigest()[:5]
@@ -140,8 +144,18 @@ class discordRichPresencePlex(discordRichPresence):
 		self.stopTimer2 = None
 		self.checkConnectionTimer = None
 		self.ignoreCount = 0
-
+	
+	def kill(self, fgh):
+		discordRichPresence.stop(discordRichPresence)
+		SysTrayIcon.shutdown
+		self.stop()
+		sys.exit()
+		
 	def run(self):
+		menu_options = (("Plex Discord Info", None, tray_title),)
+		systray = SysTrayIcon("icon.ico", "Plex Discord Info", menu_options, on_quit=self.kill)
+		systray.start()
+		
 		self.reset()
 		connected = False
 		while (not connected):
@@ -301,8 +315,8 @@ class discordRichPresencePlex(discordRichPresence):
 					extra = extra + " · " + ", ".join([genre.tag for genre in metadata.genres[:3]])
 					largeText = "Watching a Movie"
 				elif (mediaType == "episode"):
-					title = metadata.grandparentTitle
-					extra = extra + " · S" + str(metadata.parentIndex) + " · E" + str(metadata.index) + " - " + metadata.title
+					title = metadata.grandparentTitle + " · S" + str(metadata.parentIndex) + "E" + str(metadata.index)
+					extra = metadata.title
 					largeText = "Watching a TV Show"
 				elif (mediaType == "track"):
 					title = metadata.title
@@ -319,7 +333,7 @@ class discordRichPresencePlex(discordRichPresence):
 					"state": extra,
 					"assets": {
 						"large_text": largeText,
-						"large_image": "logo",
+						"large_image": "plex_logo",
 						"small_text": state.capitalize(),
 						"small_image": state
 					},
