@@ -1,0 +1,2 @@
+pythonw discordRichPresencePlex.py
+exit
